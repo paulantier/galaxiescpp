@@ -53,17 +53,17 @@ void Environment::addPlanet() {
                 continue;
             }
 
-            double distance = std::sqrt((newPlanet->x - celestialObject->x) * (newPlanet->x - celestialObject->x) +
-                                        (newPlanet->y - celestialObject->y) * (newPlanet->y - celestialObject->y));
+            double distance = (newPlanet->x - celestialObject->x) * (newPlanet->x - celestialObject->x) +
+                              (newPlanet->y - celestialObject->y) * (newPlanet->y - celestialObject->y);
             //std::cout << "Distance to object at (" << celestialObject->x << ", " << celestialObject->y << "): " << distance << std::endl;
 
-            if (isStar(celestialObject) && distance < MIN_STAR_DISTANCE) {
+            if (isStar(celestialObject) && distance < MIN_STAR_DISTANCE * MIN_STAR_DISTANCE) {
                 //std::cout << "Too close to a star, retrying..." << std::endl;
                 isFarEnough = false;
                 break;
             }
             
-            if (isPlanet(celestialObject) && distance < MIN_PLANET_DISTANCE) {
+            if (isPlanet(celestialObject) && distance < MIN_PLANET_DISTANCE * MIN_PLANET_DISTANCE) {
                 //std::cout << "Too close to a planet, retrying..." << std::endl;
                 isFarEnough = false;
                 break;
@@ -79,6 +79,42 @@ void Environment::addPlanet() {
             //std::cout << "New planet deleted, position was invalid." << std::endl;
         }
     }
+}
+
+void Environment::addDebris() {
+
+	Debris* newDebris = new Debris();
+	
+	bool isFarEnough = true;
+	
+    for (const auto& celestialObject : celestialObjects) {
+        if (!celestialObject) {
+            continue;
+        }
+
+        double distance = (newDebris->x - celestialObject->x) * (newDebris->x - celestialObject->x) +
+                          (newDebris->y - celestialObject->y) * (newDebris->y - celestialObject->y);
+
+        if (distance < (celestialObject->radius + newDebris->radius) *
+        			   (celestialObject->radius + newDebris->radius)) {
+            isFarEnough = false;
+            break;
+        }
+    }
+    if (isFarEnough) {
+        celestialObjects.push_back(newDebris); 
+    } else {
+        delete newDebris;
+    }
+}
+
+void Environment::createDebris() {
+	//celestialObjects.insert(celestialObjects.end(), objectsToCreate.begin(), objectsToCreate.end());
+	//objectsToCreate.clear();
+	if (objectsToCreate.size() > 0) {
+		celestialObjects.push_back(objectsToCreate[0]);
+		objectsToCreate.erase(objectsToCreate.begin());
+	}
 }
 
 
@@ -98,18 +134,9 @@ void Environment::applyGravitationalForce(CelestialObject* Object1, CelestialObj
 
     // Cast to the appropriate class to access Mass
     double mass1 = 0, mass2 = 0;
-
-    if (Star* star1 = dynamic_cast<Star*>(Object1)) {
-        mass1 = star1->Mass;
-    } else if (Planet* planet1 = dynamic_cast<Planet*>(Object1)) {
-        mass1 = planet1->Mass;
-    }
-
-    if (Star* star2 = dynamic_cast<Star*>(Object2)) {
-        mass2 = star2->Mass;
-    } else if (Planet* planet2 = dynamic_cast<Planet*>(Object2)) {
-        mass2 = planet2->Mass;
-    }
+	
+	mass1 = Object1->getMass();
+	mass2 = Object2->getMass();
 
     // Calculate the gravitational force magnitude
     double force = GravitationalConstant * (mass1 * mass2) / (r * r);
@@ -129,15 +156,20 @@ void Environment::applyGravitationalForce(CelestialObject* Object1, CelestialObj
 
 void Environment::applyRelations() {
     // Loop over each unique pair without repetition
-    for (size_t i = 0; i < celestialObjects.size(); ++i) {
-        for (size_t j = i + 1; j < celestialObjects.size(); ++j) {
+    int loop_size = celestialObjects.size();
+    
+    for (int i = 0; i < loop_size; ++i) {
+        for (int j = i + 1; j < loop_size; ++j) {
             applyGravitationalForce(celestialObjects[i], celestialObjects[j]);
         }
     }
 }
 
 void Environment::updatePositions() {
-	for (size_t i = 0; i < celestialObjects.size(); ++i) {
+	int loop_size = celestialObjects.size();
+
+	for (int i = 0; i < loop_size; ++i) {
+		
 		celestialObjects[i]->updateVelocity();
 		celestialObjects[i]->updatePosition();
 		celestialObjects[i]->resetAcceleration();
@@ -152,6 +184,11 @@ bool Environment::isPlanet(CelestialObject* obj) {
     return dynamic_cast<Planet*>(obj) != nullptr;  // Checks if obj is a Planet
 }
 
+bool Environment::isDebris(CelestialObject* obj) {
+    return dynamic_cast<Debris*>(obj) != nullptr;  // Checks if obj is a Debris
+}
+
+
 
 void Environment::checkCollisions() {
 	int initialNumberOfObjects = celestialObjects.size();
@@ -164,8 +201,8 @@ void Environment::checkCollisions() {
             double dx = celestialObjects[j]->x - celestialObjects[i]->x;
             double dy = celestialObjects[j]->y - celestialObjects[i]->y;
             double distance = std::sqrt(dx * dx + dy * dy);
-
-            if (distance < celestialObjects[i]->getRadius()+celestialObjects[j]->getRadius()) {
+			
+            if (distance < celestialObjects[i]->radius+celestialObjects[j]->radius) {
                 // Collision detected between celestialObjects[i] and celestialObjects[j]
                 //std::cout << "Collision to handle" << std::endl;
                 idToRemove = handleCollision(celestialObjects[i], celestialObjects[j], distance, celestialObjects[i]->getRadius(), celestialObjects[j]->getRadius(), i, j);
@@ -188,9 +225,11 @@ void Environment::checkCollisions() {
     for (int id_iter : objectsToRemove) {
         if (id_iter >= 0 && static_cast<std::size_t>(id_iter) < celestialObjects.size()) { // type casting to avoid warning
             //std::cout << "Removing object with id: " << id_iter << std::endl;
+            std::cout << "Removing object !" << std::endl;
             celestialObjects.erase(celestialObjects.begin() + id_iter);
         }
     }
+    
 }
 
 int Environment::handleCollision(CelestialObject* obj1, CelestialObject* obj2, double distance, double radius1, double radius2, int loop_id1, int loop_id2) {
@@ -223,7 +262,7 @@ int Environment::handleCollision(CelestialObject* obj1, CelestialObject* obj2, d
         double newMass = smallestStar->getMass() + largestStar->getMass();
         double rSmall3 = std::pow(smallestStar->getRadius(),3);
 		double rLarge3 = std::pow(largestStar->getRadius(),3);
-		double newRadius = std::pow(rSmall3 + rLarge3, 1.0/3.0);
+		double newRadius = std::cbrt(rSmall3 + rLarge3);
 
         double newDensity = newMass / (4.0*M_PI/3.0 * std::pow(newRadius,3));
 
@@ -243,15 +282,87 @@ int Environment::handleCollision(CelestialObject* obj1, CelestialObject* obj2, d
         largestStar->updateStarColorFromTemperature();
         
     } else if (isPlanet(obj1) && isPlanet(obj2)) {
-    
-    	
-        // placeholder for future debris handling
-        // i'll code this once the debris class is created
-        // can create objects here with CelestialObject* newDebris = new Debris();
-        // celestialObjects.push_back(newDebris);
-        idToRemove = -1; 
+    	std::cout << "Planet-Planet Collision !" << std::endl;
+    	CelestialObject* smallestPlanet;
+        CelestialObject* largestPlanet;
+        
+        if (obj1->getMass() < obj2->getMass()) {
+            smallestPlanet = obj1;
+            largestPlanet = obj2;
+            idToRemove = loop_id1;
+        } else {
+            smallestPlanet = obj2;
+            largestPlanet = obj1;
+            idToRemove = loop_id2;
+        }
+        
+        double newMass = largestPlanet->getMass() - smallestPlanet->getMass();
+        double totalMass = largestPlanet->getMass() + smallestPlanet->getMass();
+		
+		double newRadius = std::cbrt( (3 * largestPlanet->getVolume()) / (4 * M_PI) );
+		
+		// Calculate weighted average of their velocities
+        double newVx = (smallestPlanet->vx * smallestPlanet->getMass() + largestPlanet->vx * largestPlanet->getMass())/totalMass;
+        double newVy = (smallestPlanet->vy * smallestPlanet->getMass() + largestPlanet->vy * largestPlanet->getMass())/totalMass;
+		
+        // Update the larger star's properties
+        largestPlanet->setMass(newMass);
+        largestPlanet->setRadius(newRadius);
+        largestPlanet->setVelocity(newVx,newVy);
         
         
+        double totalEnergy = largestPlanet->getMass()*(largestPlanet->vx * largestPlanet->vx + largestPlanet->vy * largestPlanet->vx) + smallestPlanet->getMass()*(smallestPlanet->vx * smallestPlanet->vx + smallestPlanet->vy * smallestPlanet->vx);
+        			  
+        double largestPlanetNewEnergy = newMass * (newVx*newVx + newVy*newVy);
+        
+        double remainingEnergy = totalEnergy - largestPlanetNewEnergy;
+        double remainingMass = totalMass - newMass;
+        
+        double unitX = (largestPlanet->x - smallestPlanet->x) / distance;
+       	double unitY = (largestPlanet->y - smallestPlanet->y) / distance;
+       	
+       	double debrisVelocity = std::sqrt(remainingEnergy / remainingMass);
+        
+       	while (remainingMass > 0) {
+       		
+       		Debris* newDebris = new Debris();
+       		
+       		if (newDebris->getMass() <= remainingMass) {
+       			remainingMass -= newDebris->getMass();
+       			remainingEnergy-= remainingMass * debrisVelocity * debrisVelocity;
+       		}
+       		else {
+       			
+       			debrisVelocity = std::sqrt(remainingEnergy / newDebris->getMass());
+       			remainingMass = 0.0;
+       		
+       		}
+       			
+       		double randomAnglePosition = Aleatoire::Uniforme(-M_PI/4.0, M_PI/4.0);
+       		double randomAngleDirection = Aleatoire::Uniforme(-M_PI/2.0, M_PI/2.0);
+       		
+       		//std::cout << "unitX : " << unitX << std::endl;
+       		//std::cout << "unitY : " << unitY << std::endl;
+       		//std::cout << "cos(randomAngle) : " << std::cos(randomAnglePosition) << std::endl;
+       		//std::cout << "sin(randomAngle) : " << std::sin(randomAnglePosition) << std::endl;
+       		//std::cout << "newRadius : " << newRadius << std::endl;
+       		
+       		newDebris->x = largestPlanet->x + (newRadius + newDebris->radius + 1) * 
+       						(unitX * std::cos(randomAnglePosition) - unitY * std::sin(randomAnglePosition));
+       						
+       		newDebris->y = largestPlanet->y + (newRadius + newDebris->radius + 1) * 
+       						(unitX * std::sin(randomAnglePosition) + unitY * std::cos(randomAnglePosition));
+       		
+       		newDebris->vx = debrisVelocity * (unitX * std::cos(randomAngleDirection) - unitY * std::sin(randomAngleDirection));
+       		newDebris->vy = debrisVelocity * (unitX * std::sin(randomAngleDirection) + unitY * std::cos(randomAngleDirection));
+       		
+       		//std::cout << "x : " << newDebris->x << std::endl;
+       		//std::cout << "y : " << newDebris->y << std::endl;
+       		
+       		objectsToCreate.push_back(newDebris);  			
+       		
+       	}
+                 
     } else if ((isStar(obj1) && isPlanet(obj2)) || (isStar(obj2) && isPlanet(obj1))) {
         // Star gains mass from the planet, and planet is destroyed
         std::cout << "Planet-Star Collision !" << std::endl;
@@ -286,6 +397,38 @@ int Environment::handleCollision(CelestialObject* obj1, CelestialObject* obj2, d
         } else {
         	idToRemove = -1;
         } 
+        
+    } else if ( (isDebris(obj1) && !isDebris(obj2)) || (isDebris(obj2) && !isDebris(obj2)) ) {
+    	// Object gains mass from the debris, and debris is destroyed
+        std::cout << "Debris Absorption!" << std::endl;
+        
+        CelestialObject* debris;
+        CelestialObject* obj;
+        
+        if (isDebris(obj1)){
+        
+        	debris = obj1;
+        	obj = obj2;
+        	
+        	idToRemove = loop_id1;
+        	
+        } else {
+        
+        	debris = obj2;        	
+        	obj = obj1;
+        	
+        	idToRemove = loop_id2;
+        }
+        
+        // Add debris' mass to the object
+        obj->setMass(obj->getMass() + debris->getMass());
+
+        obj->setDensity(obj->getMass() / obj->getVolume());
+        
+        obj->updateTemperature();
+        
+        obj->updateStarColorFromTemperature();
+        
     }
     
     return idToRemove;

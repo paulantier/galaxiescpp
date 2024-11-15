@@ -4,6 +4,7 @@
 #include "CelestialObject.h"
 #include "Star.h"
 #include "Planet.h"
+#include "Debris.h"
 
 #include <vector>
 #include <cstdlib>
@@ -19,7 +20,8 @@ public:
     
     void addStar();
     void addPlanet();
-    //void addAsteroid();
+    void addDebris();
+    void createDebris();
     
     void applyRelations();  // Update all interactions and movement
     void updatePositions();
@@ -28,6 +30,7 @@ public:
     int handleCollision(CelestialObject* obj1, CelestialObject* obj2, double distance, double radius1, double radius2, int loop_id1, int loop_id2);
     
     std::vector<CelestialObject*> celestialObjects;
+    std::vector<CelestialObject*> objectsToCreate;
    
 private :
 	void applyGravitationalForce(CelestialObject* Object1, CelestialObject* Object2);
@@ -35,6 +38,8 @@ private :
 	bool isStar(CelestialObject* obj);
 	
 	bool isPlanet(CelestialObject* obj);
+	
+	bool isDebris(CelestialObject* obj);
 };
 
 #endif // ENVIRONMENT_H
